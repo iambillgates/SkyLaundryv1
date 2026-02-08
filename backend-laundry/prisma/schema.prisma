@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql" // atau postgresql
+  url      = env("DATABASE_URL") // <--- KEMBALIKAN BARIS INI
+}
+
+enum OrderStatus {
+  PENDING
+  WASHING
+  IRONING
+  READY
+  COMPLETED
+}
+
+enum ServiceType {
+  KILOAN
+  SATUAN
+  EXPRESS
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  orderId   String   @unique
+  customerName  String
+  weight        Float
+  serviceType   ServiceType
+  totalPrice    Float
+  status        OrderStatus @default(PENDING)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
