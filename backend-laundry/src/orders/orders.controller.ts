@@ -48,4 +48,9 @@ export class OrdersController {
   async trackOrder(@Param('orderId') orderId: string) {
     return this.ordersService.findByPublicId(orderId);
   }
+
+  @Get('activity/logs')
+  getLogs() {
+    return this.ordersService.getLogs();
+  }
 }

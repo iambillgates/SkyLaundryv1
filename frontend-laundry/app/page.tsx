@@ -128,15 +128,27 @@ export default function Home() {
       <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2 group cursor-pointer shrink-0">
-              <div className="bg-blue-600 p-1 rounded-xl shadow-lg w-9 h-9 flex items-center justify-center">
-                <span className="text-white font-bold text-xs">SL</span>
+            
+            {/* LOGO SECTION */}
+            <div className="flex items-center gap-3 group cursor-pointer shrink-0">
+              {/* Container Logo Image */}
+              <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-md border border-slate-100 group-hover:scale-105 transition-transform duration-300">
+                <Image 
+                  src="/logo1.png" 
+                  alt="Sky Laundry Logo" 
+                  fill 
+                  className="object-cover"
+                  sizes="(max-width: 768px) 40px, 40px"
+                />
               </div>
+              
+              {/* Brand Name */}
               <span className="text-base sm:text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-sky-500">
                 Sky Laundry
               </span>
             </div>
 
+            {/* DESKTOP MENU */}
             <div className="hidden md:flex items-center space-x-6">
               <a href="#beranda" className="text-xs font-bold text-slate-600 hover:text-blue-600 uppercase tracking-wider transition-colors">Beranda</a>
               <a href="#cek-status" className="text-xs font-bold text-slate-600 hover:text-blue-600 uppercase tracking-wider transition-colors">Cek Status</a>
@@ -150,22 +162,24 @@ export default function Home() {
               </Link>
             </div>
 
+            {/* MOBILE MENU TOGGLE */}
             <div className="md:hidden flex items-center">
-              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-lg bg-slate-100 text-slate-600">
-                {isMobileMenuOpen ? <X /> : <Menu />}
+              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
             </div>
           </div>
         </div>
 
+        {/* MOBILE MENU DROPDOWN */}
         {isMobileMenuOpen && (
           <div className="md:hidden bg-white border-t border-slate-100 p-4 space-y-2 shadow-2xl absolute w-full left-0 animate-in slide-in-from-top-5">
-            <a href="#beranda" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl" onClick={() => setIsMobileMenuOpen(false)}>Beranda</a>
-            <a href="#cek-status" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl" onClick={() => setIsMobileMenuOpen(false)}>Cek Status</a>
-            <a href="#layanan" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl" onClick={() => setIsMobileMenuOpen(false)}>Layanan</a>
-            <a href="#tentang" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl" onClick={() => setIsMobileMenuOpen(false)}>Tentang Kami</a>
-            <a href="#kontak" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl" onClick={() => setIsMobileMenuOpen(false)}>Kontak</a>
-            <Link href="/staff-login" className="block bg-blue-600 text-white text-center py-3 rounded-xl font-bold text-sm">Login</Link>
+            <a href="#beranda" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Beranda</a>
+            <a href="#cek-status" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Cek Status</a>
+            <a href="#layanan" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Layanan</a>
+            <a href="#tentang" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Tentang Kami</a>
+            <a href="#kontak" className="block text-slate-700 font-bold text-sm p-3 hover:bg-blue-50 rounded-xl transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Kontak</a>
+            <Link href="/staff-login" className="block bg-blue-600 text-white text-center py-3 rounded-xl font-bold text-sm shadow-md active:scale-95 transition-all">Login</Link>
           </div>
         )}
       </nav>

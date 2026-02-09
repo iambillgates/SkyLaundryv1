@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -7,30 +10,26 @@ import { UpdateOrderDto } from './dto/update-order.dto';
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
-  // --- LOGIKA GENERATOR ID (Baru) ---
+  // --- LOGIKA GENERATOR ID ---
   private async generateOrderId(serviceType: string): Promise<string> {
     const now = new Date();
-
-    // 1. Ambil YYMMDD (Tahun 2 digit, Bulan, Tanggal)
-    // slice(2, 10) akan mengambil dari index 2 (melewati '20' di tahun)
-    // Hasil: 240209
+    // 1. Ambil YYMMDD (Format: 240209)
     const dateStr = now.toISOString().slice(2, 10).replace(/-/g, '');
 
-    // 2. Ambil Jam & Menit (HHmm)
+    // 2. Ambil Jam & Menit
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
 
-    // 3. Kode Layanan Singkat (1 Huruf)
-    let serviceCode = 'X'; // Default
+    // 3. Kode Layanan (K, S, E)
+    let serviceCode = 'X';
     if (serviceType === 'KILOAN') serviceCode = 'K';
     if (serviceType === 'SATUAN') serviceCode = 'S';
     if (serviceType === 'EXPRESS') serviceCode = 'E';
 
-    // 4. Gabungkan: YYMMDD-HHmm-S
-    // Contoh: 240209-1430-K
+    // 4. Gabungkan: 240209-1430-K
     const baseId = `${dateStr}-${hours}${minutes}-${serviceCode}`;
 
-    // 5. Cek Duplikasi (Looping)
+    // 5. Cek Duplikasi
     let finalId = baseId;
     let counter = 1;
 
@@ -39,88 +38,75 @@ export class OrdersService {
         where: { orderId: finalId },
       });
 
-      if (!existingOrder) {
-        break;
-      }
+      if (!existingOrder) break;
 
-      // Jika ada duplikat di menit yang sama, tambah angka belakang
-      // Contoh: 240209-1430-K1
-      finalId = `${baseId}${counter}`;
+      finalId = `${baseId}-${counter}`;
       counter++;
     }
 
     return finalId;
   }
 
-  // --- CREATE (Dimodifikasi) ---
-  // Pastikan import ServiceType ada (biasanya dari @prisma/client)
-  // import { ServiceType, OrderStatus } from '@prisma/client';
+  // --- PRIVATE HELPER: LOG ACTIVITY ---
+  private async logActivity(action: string, details: string) {
+    await this.prisma.activityLog.create({
+      data: { action, details },
+    });
+  }
 
+  // --- CREATE ORDER ---
   async create(createOrderDto: CreateOrderDto) {
-    // 1. DAFTAR HARGA (Configurable)
-    // Anda bisa mengubah angka ini sesuai harga laundry Anda
+    // 1. Tentukan Harga
     const priceList = {
-      KILOAN: 7000, // Rp 7.000 per Kg
-      SATUAN: 10000, // Rp 10.000 per Pcs
-      EXPRESS: 15000, // Rp 15.000 per Kg (Layanan Kilat)
+      KILOAN: 7000,
+      SATUAN: 10000,
+      EXPRESS: 15000,
     };
 
-    // 2. Ambil harga satuan berdasarkan tipe layanan
-    // Jika tipe tidak dikenali, default ke 7000 (safety fallback)
     const pricePerUnit = priceList[createOrderDto.serviceType] || 7000;
-
-    // 3. Hitung Total Harga
     const total = createOrderDto.weight * pricePerUnit;
 
-    // 4. Generate Order ID (Logic Kustom Anda)
+    // 2. Generate ID Unik
     const newOrderId = await this.generateOrderId(createOrderDto.serviceType);
 
-    // 5. Simpan ke Database
-    return await this.prisma.order.create({
+    // 3. Simpan ke Database
+    const order = await this.prisma.order.create({
       data: {
         orderId: newOrderId,
         customerName: createOrderDto.customerName,
         weight: createOrderDto.weight,
-        serviceType: createOrderDto.serviceType, // Harus sesuai Enum Prisma (KILOAN/SATUAN/EXPRESS)
+        serviceType: createOrderDto.serviceType,
         totalPrice: total,
-        status: 'PENDING', // Default status sesuai Enum Prisma
+        status: 'PENDING',
+        isPaid: createOrderDto.isPaid || false, // Default false jika tidak ada
       },
     });
+
+    // 4. [LOGGING] Catat Aktivitas
+    await this.logActivity(
+      'CREATE_ORDER',
+      `Pesanan baru dibuat: ${order.customerName} (${order.orderId})`,
+    );
+
+    return order;
   }
 
-  // READ ALL
+  // --- READ ALL ---
   async findAll() {
     return await this.prisma.order.findMany({
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  // READ ONE
-  // Bisa cari by ID internal atau orderId custom
+  // --- READ ONE (By UUID) ---
   async findOne(id: string) {
-    return await this.prisma.order.findUnique({
-      where: { id },
-    });
+    return await this.prisma.order.findUnique({ where: { id } });
   }
 
-  // UPDATE
-  async update(id: string, updateOrderDto: UpdateOrderDto) {
-    return await this.prisma.order.update({
-      where: { id },
-      data: updateOrderDto,
-    });
-  }
-
-  // DELETE
-  async remove(id: string) {
-    return await this.prisma.order.delete({
-      where: { id },
-    });
-  }
-
+  // --- READ ONE (By Public ID / Resi) ---
   async findByPublicId(orderId: string) {
     const order = await this.prisma.order.findUnique({
-      where: { orderId: orderId }, // Cari di kolom orderId
+      where: { orderId: orderId },
     });
 
     if (!order) {
@@ -128,5 +114,69 @@ export class OrdersService {
     }
 
     return order;
+  }
+
+  // --- UPDATE ORDER ---
+  async update(id: string, updateOrderDto: UpdateOrderDto) {
+    // Ambil data lama untuk perbandingan log
+    const oldOrder = await this.prisma.order.findUnique({ where: { id } });
+
+    if (!oldOrder) throw new NotFoundException('Order tidak ditemukan');
+
+    // Lakukan Update
+    const updatedOrder = await this.prisma.order.update({
+      where: { id },
+      data: updateOrderDto,
+    });
+
+    // [LOGGING] Cek Perubahan Status
+    if (updateOrderDto.status && oldOrder.status !== updateOrderDto.status) {
+      await this.logActivity(
+        'UPDATE_STATUS',
+        `Resi ${oldOrder.orderId}: Status berubah dari ${oldOrder.status} ke ${updateOrderDto.status}`,
+      );
+    }
+
+    // [LOGGING] Cek Perubahan Pembayaran
+    if (
+      updateOrderDto.isPaid !== undefined &&
+      oldOrder.isPaid !== updateOrderDto.isPaid
+    ) {
+      const statusBayar = updateOrderDto.isPaid ? 'LUNAS' : 'BELUM LUNAS';
+      await this.logActivity(
+        'UPDATE_PAYMENT',
+        `Resi ${oldOrder.orderId}: Pembayaran diubah menjadi ${statusBayar}`,
+      );
+    }
+
+    return updatedOrder;
+  }
+
+  // --- DELETE ORDER ---
+  async remove(id: string) {
+    // Ambil data dulu sebelum dihapus (untuk info log)
+    const order = await this.prisma.order.findUnique({ where: { id } });
+
+    if (!order) throw new NotFoundException('Order tidak ditemukan');
+
+    // Hapus Data
+    await this.prisma.order.delete({ where: { id } });
+
+    // [LOGGING] Catat penghapusan
+    await this.logActivity(
+      'DELETE_ORDER',
+      `Pesanan ${order.customerName} (${order.orderId}) telah DIHAPUS PERMANEN`,
+    );
+
+    return { message: 'Order deleted successfully' };
+  }
+
+  // --- GET LOGS (Fitur Baru) ---
+  async getLogs() {
+    // Tambahkan 'await' di sini agar ESLint senang
+    return await this.prisma.activityLog.findMany({
+      take: 20,
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }

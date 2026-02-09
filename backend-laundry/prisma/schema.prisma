@@ -41,3 +41,10 @@ model User {
   name      String?
   createdAt DateTime @default(now())
 }
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  action    String   // Contoh: "CREATE_ORDER", "UPDATE_STATUS", "DELETE"
+  details   String   // Contoh: "Pesanan Budi (123) diubah menjadi COMPLETED"
+  createdAt DateTime @default(now())
+}
