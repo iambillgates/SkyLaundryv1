@@ -42,4 +42,10 @@ export class OrdersController {
     // Ubah jadi string
     return this.ordersService.remove(id); // HAPUS tanda +
   }
+
+  // Endpoint khusus untuk tracking resi (letakkan sebelum @Get(':id'))
+  @Get('track/:orderId')
+  async trackOrder(@Param('orderId') orderId: string) {
+    return this.ordersService.findByPublicId(orderId);
+  }
 }

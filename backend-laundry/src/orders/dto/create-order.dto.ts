@@ -1,8 +1,32 @@
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  IsBoolean,
+  IsOptional,
+  IsEnum,
+} from 'class-validator';
+// Import Enum langsung dari Prisma Client agar sinkron 100%
 import { ServiceType } from '@prisma/client';
-// HAPUS baris: import { CreateOrderDto } from './create-order.dto';
 
 export class CreateOrderDto {
+  @IsString()
+  @IsNotEmpty()
   customerName: string;
-  weight: number;
+
+  @IsBoolean()
+  @IsString()
+  @IsOptional()
+  isPaid?: boolean;
+  phone?: string;
+
+  // Validasi: Hanya terima 'KILOAN', 'SATUAN', atau 'EXPRESS'
+  @IsEnum(ServiceType, {
+    message: 'Service type harus KILOAN, SATUAN, atau EXPRESS',
+  })
   serviceType: ServiceType;
+
+  @IsNumber()
+  @IsNotEmpty()
+  weight: number;
 }

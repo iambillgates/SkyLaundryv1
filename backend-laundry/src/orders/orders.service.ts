@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
@@ -11,37 +11,41 @@ export class OrdersService {
   private async generateOrderId(serviceType: string): Promise<string> {
     const now = new Date();
 
-    // 1. Format Tanggal & Waktu: YYYYMMDDHHmm
-    // Menggunakan padStart(2, '0') agar jam 9 menjadi '09'
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, ''); // 20240207
+    // 1. Ambil YYMMDD (Tahun 2 digit, Bulan, Tanggal)
+    // slice(2, 10) akan mengambil dari index 2 (melewati '20' di tahun)
+    // Hasil: 240209
+    const dateStr = now.toISOString().slice(2, 10).replace(/-/g, '');
+
+    // 2. Ambil Jam & Menit (HHmm)
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
 
-    // 2. Mapping Service Type ke Kode Angka
-    // REGULAR -> 01, EXPRESS -> 02 (Bisa disesuaikan)
-    let serviceCode = '00';
-    if (serviceType === 'REGULAR') serviceCode = '01';
-    if (serviceType === 'EXPRESS') serviceCode = '02';
+    // 3. Kode Layanan Singkat (1 Huruf)
+    let serviceCode = 'X'; // Default
+    if (serviceType === 'KILOAN') serviceCode = 'K';
+    if (serviceType === 'SATUAN') serviceCode = 'S';
+    if (serviceType === 'EXPRESS') serviceCode = 'E';
 
-    // Gabungkan menjadi Base ID: 202402071930-01
-    const baseId = `${dateStr}${hours}${minutes}-${serviceCode}`;
+    // 4. Gabungkan: YYMMDD-HHmm-S
+    // Contoh: 240209-1430-K
+    const baseId = `${dateStr}-${hours}${minutes}-${serviceCode}`;
 
-    // 3. Cek Unik (Looping untuk menangani order bersamaan)
+    // 5. Cek Duplikasi (Looping)
     let finalId = baseId;
     let counter = 1;
 
     while (true) {
-      // Cek apakah ID ini sudah ada di database?
       const existingOrder = await this.prisma.order.findUnique({
         where: { orderId: finalId },
       });
 
       if (!existingOrder) {
-        break; // Jika tidak ada, ID aman digunakan
+        break;
       }
 
-      // Jika ada (duplikat), tambahkan counter: 202402071930-01-1
-      finalId = `${baseId}-${counter}`;
+      // Jika ada duplikat di menit yang sama, tambah angka belakang
+      // Contoh: 240209-1430-K1
+      finalId = `${baseId}${counter}`;
       counter++;
     }
 
@@ -49,23 +53,37 @@ export class OrdersService {
   }
 
   // --- CREATE (Dimodifikasi) ---
-  async create(createOrderDto: CreateOrderDto) {
-    // 1. Hitung Harga (Logic Lama Anda)
-    const pricePerKg = createOrderDto.serviceType === 'EXPRESS' ? 15000 : 8000;
-    const total = createOrderDto.weight * pricePerKg;
+  // Pastikan import ServiceType ada (biasanya dari @prisma/client)
+  // import { ServiceType, OrderStatus } from '@prisma/client';
 
-    // 2. Generate Order ID (Logic Baru)
+  async create(createOrderDto: CreateOrderDto) {
+    // 1. DAFTAR HARGA (Configurable)
+    // Anda bisa mengubah angka ini sesuai harga laundry Anda
+    const priceList = {
+      KILOAN: 7000, // Rp 7.000 per Kg
+      SATUAN: 10000, // Rp 10.000 per Pcs
+      EXPRESS: 15000, // Rp 15.000 per Kg (Layanan Kilat)
+    };
+
+    // 2. Ambil harga satuan berdasarkan tipe layanan
+    // Jika tipe tidak dikenali, default ke 7000 (safety fallback)
+    const pricePerUnit = priceList[createOrderDto.serviceType] || 7000;
+
+    // 3. Hitung Total Harga
+    const total = createOrderDto.weight * pricePerUnit;
+
+    // 4. Generate Order ID (Logic Kustom Anda)
     const newOrderId = await this.generateOrderId(createOrderDto.serviceType);
 
-    // 3. Simpan ke Database
+    // 5. Simpan ke Database
     return await this.prisma.order.create({
       data: {
-        orderId: newOrderId, // Field baru dimasukkan di sini
+        orderId: newOrderId,
         customerName: createOrderDto.customerName,
         weight: createOrderDto.weight,
-        serviceType: createOrderDto.serviceType,
+        serviceType: createOrderDto.serviceType, // Harus sesuai Enum Prisma (KILOAN/SATUAN/EXPRESS)
         totalPrice: total,
-        status: 'PENDING',
+        status: 'PENDING', // Default status sesuai Enum Prisma
       },
     });
   }
@@ -98,5 +116,17 @@ export class OrdersService {
     return await this.prisma.order.delete({
       where: { id },
     });
+  }
+
+  async findByPublicId(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { orderId: orderId }, // Cari di kolom orderId
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Resi ${orderId} tidak ditemukan`);
+    }
+
+    return order;
   }
 }

@@ -29,6 +29,15 @@ model Order {
   serviceType   ServiceType
   totalPrice    Float
   status        OrderStatus @default(PENDING)
+  isPaid       Boolean     @default(false) // false = Belum Lunas, true = Lunas
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String   // Password ini nanti harus di-hash (bcrypt), jangan plain text!
+  name      String?
+  createdAt DateTime @default(now())
 }
