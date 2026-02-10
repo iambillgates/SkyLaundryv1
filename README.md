@@ -1,57 +1,57 @@
 # 🧺 Sky Laundry Management System
 
-![Sky Laundry Banner](./public/banner-placeholder.png)
-*(Ganti gambar ini dengan screenshot dashboard aplikasi kamu)*
+![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js)
+![NestJS](https://img.shields.io/badge/NestJS-10-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white)
 
-> Aplikasi manajemen laundry modern berbasis web dengan **Next.js** dan **NestJS**. Didesain untuk efisiensi operasional, pelacakan real-time, dan pengalaman pengguna yang estetis.
+> **Sky Laundry** adalah aplikasi manajemen laundry modern berbasis web fullstack. Didesain untuk efisiensi operasional bisnis laundry dengan fitur pelacakan real-time, manajemen pesanan yang aman, dan antarmuka *Glassmorphism* yang estetis.
 
 ---
-
-## 🚀 Tentang Project
-
-**Sky Laundry** adalah solusi fullstack untuk digitalisasi bisnis laundry. Aplikasi ini memisahkan antarmuka publik (untuk pelanggan melacak pesanan) dan dashboard admin (untuk manajemen internal).
-
-Dibangun dengan fokus pada performa, keamanan data (Activity Log), dan kemudahan penggunaan (Auto-Print Struk), aplikasi ini siap menangani operasional laundry skala kecil hingga menengah.
 
 ## ✨ Fitur Unggulan
 
-### 🌍 Public Facing (Pelanggan)
-- **Cek Resi Real-time:** Pelacakan status laundry tanpa perlu login menggunakan Order ID unik.
-- **Layanan & Harga:** Informasi paket (Kiloan, Satuan, Express) yang transparan.
-- **WhatsApp Integration:** Tombol melayang untuk kontak langsung ke CS.
+### 🌍 Sisi Pelanggan (Public Facing)
+* **Real-time Tracking:** Pelanggan dapat melacak status cucian (Pending, Cuci, Setrika, Selesai) menggunakan Order ID unik (Contoh: `240209-1430-K`).
+* **Transparansi Layanan:** Informasi paket layanan (Kiloan, Satuan, Express) dan estimasi harga.
+* **Responsive Design:** Tampilan mobile-friendly yang responsif dan cepat.
+* **WhatsApp Integration:** Tombol floating untuk menghubungi CS via WhatsApp.
 
-### 🔒 Admin Dashboard (Staff)
-- **Manajemen Pesanan (CRUD):** Input, update status, dan hapus pesanan dengan mudah.
-- **Activity Log System:** Mencatat setiap aktivitas staff (Create/Update/Delete) untuk keamanan audit.
-- **Auto-Print Struk:** Integrasi pencetakan struk thermal otomatis setelah input pesanan.
-- **Statistik & Grafik:** Visualisasi omzet dan performa bisnis menggunakan Chart.js.
-- **Notifikasi Modern:** Feedback interaktif menggunakan Toast Notification & Modal Konfirmasi 2-Langkah.
-- **UI Glassmorphism:** Tampilan antarmuka modern yang bersih dan responsif.
-
----
-
-## 🛠️ Teknologi yang Digunakan
-
-### Frontend (Client)
-- **Framework:** [Next.js 14](https://nextjs.org/) (App Router)
-- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
-- **Icons:** [Lucide React](https://lucide.dev/)
-- **Data Fetching:** Axios
-- **Charts:** Chart.js & React-Chartjs-2
-
-### Backend (Server)
-- **Framework:** [NestJS](https://nestjs.com/)
-- **Database:** PostgreSQL / MySQL
-- **ORM:** [Prisma](https://www.prisma.io/)
-- **Validasi:** Class-Validator & Class-Transformer
+### 🔒 Sisi Admin (Dashboard Staff)
+* **Manajemen Pesanan (CRUD):**
+    * Generator Order ID Unik & Kustom.
+    * Update status pengerjaan & pembayaran (Lunas/Belum).
+    * **2-Step Delete Verification:** Modal konfirmasi ganda untuk mencegah penghapusan data tidak sengaja.
+* **Activity Log System:**
+    * Mencatat setiap aksi staff (Create, Update, Delete).
+    * Audit trail keamanan untuk pemilik laundry.
+* **Auto-Print Struk (Thermal):**
+    * Integrasi cetak struk otomatis setelah input pesanan.
+    * Modal konfirmasi cetak yang modern.
+* **Visualisasi Data:** Grafik tren transaksi dan ringkasan omzet menggunakan **Chart.js**.
+* **User Experience (UX):**
+    * **Toast Notifications:** Notifikasi status (Sukses/Gagal) yang dinamis, berwarna, dan *auto-hide*.
+    * **Glassmorphism UI:** Desain antarmuka modern dengan efek blur.
 
 ---
 
-## ⚙️ Cara Instalasi & Menjalankan (Localhost)
+## 🛠️ Tech Stack
 
-Ikuti langkah berikut untuk menjalankan project di komputer lokal:
+Project ini dibangun menggunakan teknologi terkini (Monorepo-style structure):
 
-### 1. Clone Repository
-```bash
-git clone [https://github.com/username-kamu/sky-laundry.git](https://github.com/username-kamu/sky-laundry.git)
-cd sky-laundry
+### **Frontend (Client-Side)**
+* **Framework:** Next.js 14 (App Router)
+* **Styling:** Tailwind CSS (Custom Config)
+* **Icons:** Lucide React
+* **HTTP Client:** Axios
+* **Charts:** React-Chartjs-2 & Chart.js
+
+### **Backend (Server-Side)**
+* **Framework:** NestJS (Modular Architecture)
+* **Database:** PostgreSQL / MySQL
+* **ORM:** Prisma
+* **Validation:** Class-Validator & DTOs
+
+---
+
+ject
