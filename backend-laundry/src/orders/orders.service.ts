@@ -11,37 +11,57 @@ export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
   // --- LOGIKA GENERATOR ID ---
-  private async generateOrderId(serviceType: string): Promise<string> {
-    const now = new Date();
-    // 1. Ambil YYMMDD (Format: 240209)
-    const dateStr = now.toISOString().slice(2, 10).replace(/-/g, '');
+  // --- HELPER: GENERATE RANDOM STRING (Huruf Besar & Angka) ---
+  private generateRandomString(length: number): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
 
-    // 2. Ambil Jam & Menit
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
+  // --- GENERATE ORDER ID BARU (Format: SKY-XXX9999) ---
+  // Parameter diubah menerima phoneNumber, bukan serviceType lagi untuk ID ini
+  private async generateOrderId(phoneNumber: string): Promise<string> {
+    // 1. Ambil 4 Digit Terakhir No HP
+    // Hapus semua karakter non-digit
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
 
-    // 3. Kode Layanan (K, S, E)
-    let serviceCode = 'X';
-    if (serviceType === 'KILOAN') serviceCode = 'K';
-    if (serviceType === 'SATUAN') serviceCode = 'S';
-    if (serviceType === 'EXPRESS') serviceCode = 'E';
+    // Ambil 4 digit terakhir. Jika input kurang dari 4 digit, pad dengan '0' di depan
+    const last4Digits =
+      cleanPhone.length >= 4
+        ? cleanPhone.slice(-4)
+        : cleanPhone.padStart(4, '0');
 
-    // 4. Gabungkan: 240209-1430-K
-    const baseId = `${dateStr}-${hours}${minutes}-${serviceCode}`;
+    // 2. Loop Cek Duplikasi
+    // Default panjang karakter acak = 3.
+    // Jadi total ID = SKY- (4 char) + Acak (3 char) + NoHP (4 char) = 11 Karakter total (Unik 7)
+    let randomLength = 3;
+    let finalId = '';
+    let isUnique = false;
 
-    // 5. Cek Duplikasi
-    let finalId = baseId;
-    let counter = 1;
+    while (!isUnique) {
+      // Generate bagian acak (Huruf/Angka)
+      const randomPart = this.generateRandomString(randomLength);
 
-    while (true) {
+      // Gabungkan: SKY - [3 Acak] [4 Digit HP]
+      // Contoh: SKY-A7B8899
+      finalId = `SKY-${randomPart}${last4Digits}`;
+
+      // Cek apakah ID ini sudah ada di database
       const existingOrder = await this.prisma.order.findUnique({
         where: { orderId: finalId },
       });
 
-      if (!existingOrder) break;
-
-      finalId = `${baseId}-${counter}`;
-      counter++;
+      if (!existingOrder) {
+        // Jika tidak ada duplikat, stop loop
+        isUnique = true;
+      } else {
+        // Jika kebetulan duplikat (SANGAT JARANG),
+        // Tambah panjang karakter acak jadi 4 agar pasti beda
+        randomLength++;
+      }
     }
 
     return finalId;
@@ -67,13 +87,14 @@ export class OrdersService {
     const total = createOrderDto.weight * pricePerUnit;
 
     // 2. Generate ID Unik
-    const newOrderId = await this.generateOrderId(createOrderDto.serviceType);
+    const newOrderId = await this.generateOrderId(createOrderDto.phoneNumber);
 
     // 3. Simpan ke Database
     const order = await this.prisma.order.create({
       data: {
         orderId: newOrderId,
         customerName: createOrderDto.customerName,
+        phoneNumber: createOrderDto.phoneNumber,
         weight: createOrderDto.weight,
         serviceType: createOrderDto.serviceType,
         totalPrice: total,

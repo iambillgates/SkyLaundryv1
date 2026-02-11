@@ -25,6 +25,7 @@ model Order {
   id            String      @id @default(uuid())
   orderId   String   @unique
   customerName  String
+  phoneNumber  String   @default("-")
   weight        Float
   serviceType   ServiceType
   totalPrice    Float

@@ -6,7 +6,7 @@ import {
   LineChart, Search, Filter, RotateCcw, LogOut, 
   CheckCircle, AlertCircle, Trash2, Package, Calendar, 
   Plus, X, Edit, Save, Loader2, Clock, Printer, DollarSign, 
-  AlertTriangle, Info // Icon tambahan untuk notifikasi & log
+  AlertTriangle, Info, ChevronLeft, ChevronRight // Icon tambahan untuk notifikasi & log
 } from 'lucide-react';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler
@@ -20,6 +20,7 @@ interface Order {
   id: string; 
   orderId: string;
   customerName: string;
+  phoneNumber: string;
   serviceType: 'KILOAN' | 'SATUAN' | 'EXPRESS';
   weight: number;
   totalPrice: number;
@@ -45,7 +46,12 @@ export default function Dashboard() {
   // State Filter
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('');
+  const [startDate, setStartDate] = useState(''); 
+  const [endDate, setEndDate] = useState('');     
+
+  // --- LOGIKA PAGINATION DINAMIS ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(15); // Default 15
 
   // State Modal & Print
   const [showModal, setShowModal] = useState(false);
@@ -70,6 +76,7 @@ export default function Dashboard() {
   // Form Data Default
   const initialForm = {
     customerName: '',
+    phoneNumber: '',
     serviceType: 'KILOAN', 
     weight: 1,
     status: 'PENDING',
@@ -287,6 +294,7 @@ export default function Dashboard() {
     setIsEditing(true); setEditId(order.id);
     setFormData({
       customerName: order.customerName,
+      phoneNumber: order.phoneNumber,
       serviceType: order.serviceType,
       weight: order.weight,
       status: order.status,
@@ -299,13 +307,47 @@ export default function Dashboard() {
 
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
-      const matchSearch = order.customerName.toLowerCase().includes(search.toLowerCase()) || 
-                          order.orderId.toLowerCase().includes(search.toLowerCase());
+      const lowerSearch = search.toLowerCase();
+      const paymentStatusSearch = order.isPaid ? 'lunas' : 'belum'; 
+
+      // 1. LOGIKA SEARCH TEXT (Sama seperti sebelumnya)
+      const matchSearch = 
+        order.customerName.toLowerCase().includes(lowerSearch) ||   
+        order.orderId.toLowerCase().includes(lowerSearch) ||        
+        (order.phoneNumber && order.phoneNumber.includes(search)) || 
+        order.serviceType.toLowerCase().includes(lowerSearch) ||    
+        paymentStatusSearch.includes(lowerSearch);
+
+      // 2. LOGIKA STATUS
       const matchStatus = statusFilter === 'all' ? true : order.status === statusFilter;
-      const matchDate = dateFilter ? order.createdAt.startsWith(dateFilter) : true;
+      
+      // 3. LOGIKA DATE RANGE (BARU)
+      let matchDate = true;
+      if (startDate || endDate) {
+        const orderDate = new Date(order.createdAt).setHours(0, 0, 0, 0); // Ambil tanggalnya saja (jam 00:00)
+        const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : null;
+        const end = endDate ? new Date(endDate).setHours(0, 0, 0, 0) : null;
+
+        if (start && orderDate < start) matchDate = false; // Jika sebelum tanggal mulai
+        if (end && orderDate > end) matchDate = false;     // Jika setelah tanggal akhir
+      }
+      
       return matchSearch && matchStatus && matchDate;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [orders, search, statusFilter, dateFilter]);
+  }, [orders, search, statusFilter, startDate, endDate]); // Jangan lupa update dependency array
+
+  // Hitung index data
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+
+  // Fungsi ganti halaman
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, startDate, endDate, itemsPerPage]);
 
   const stats = useMemo(() => ({
     income: orders.filter(o => o.status === 'COMPLETED').reduce((acc, curr) => acc + curr.totalPrice, 0),
@@ -430,21 +472,72 @@ export default function Dashboard() {
             {/* KIRI: TABEL & FILTER */}
             <div className="lg:col-span-2 space-y-8">
             <div className="bg-white p-4 rounded-[2rem] border border-slate-200 shadow-sm flex flex-wrap items-center gap-4">
-                <div className="relative flex-grow">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input type="text" placeholder="Cari ID / Nama..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700" />
+                
+                {/* 1. INPUT PENCARIAN */}
+                <div className="relative flex-grow min-w-[200px]">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                    <input 
+                        type="text" 
+                        placeholder="Cari ID / Nama / No HP..." 
+                        value={search} 
+                        onChange={(e) => setSearch(e.target.value)} 
+                        className="w-full pl-12 pr-4 py-3 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 transition-all focus:bg-blue-50/50 focus:ring-2 focus:ring-blue-100" 
+                    />
                 </div>
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-3 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 cursor-pointer">
-                <option value="all">Semua Status</option>
-                <option value="PENDING">Pending</option>
-                <option value="WASHING">Cuci</option>
-                <option value="IRONING">Setrika</option>
-                <option value="READY">Siap Ambil</option>
-                <option value="COMPLETED">Selesai</option>
+
+                {/* 2. FILTER STATUS */}
+                <select 
+                    value={statusFilter} 
+                    onChange={(e) => setStatusFilter(e.target.value)} 
+                    className="px-4 py-3 bg-slate-50 rounded-2xl border-none outline-none font-medium text-slate-700 cursor-pointer min-w-[150px] transition-all focus:bg-blue-50/50 focus:ring-2 focus:ring-blue-100"
+                >
+                    <option value="all">Semua Status</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="WASHING">Cuci</option>
+                    <option value="IRONING">Setrika</option>
+                    <option value="READY">Siap Ambil</option>
+                    <option value="COMPLETED">Selesai</option>
                 </select>
-                <button onClick={() => {setSearch(''); setStatusFilter('all'); setDateFilter('');}} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100"><RotateCcw size={20} /></button>
+
+                {/* 3. FILTER TANGGAL (RANGE) - BARU */}
+                <div className="flex items-center bg-slate-50 rounded-2xl px-2 py-1 border border-transparent focus-within:border-blue-200 focus-within:bg-blue-50/30 transition-all">
+                    <div className="flex flex-col px-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dari</span>
+                        <input 
+                            type="date" 
+                            value={startDate} 
+                            onChange={(e) => setStartDate(e.target.value)} 
+                            className="bg-transparent border-none outline-none text-xs font-bold text-slate-600 p-0 w-[110px]" 
+                        />
+                    </div>
+                    <div className="w-px h-8 bg-slate-200 mx-1"></div> {/* Garis Pemisah */}
+                    <div className="flex flex-col px-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sampai</span>
+                        <input 
+                            type="date" 
+                            value={endDate} 
+                            onChange={(e) => setEndDate(e.target.value)} 
+                            className="bg-transparent border-none outline-none text-xs font-bold text-slate-600 p-0 w-[110px]" 
+                        />
+                    </div>
+                </div>
+
+                {/* 4. TOMBOL RESET */}
+                <button 
+                    onClick={() => {
+                        setSearch(''); 
+                        setStatusFilter('all'); 
+                        setStartDate(''); // Reset tanggal mulai
+                        setEndDate('');   // Reset tanggal akhir
+                    }} 
+                    className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 hover:scale-105 transition-all shadow-sm active:scale-95"
+                    title="Reset Filter"
+                >
+                    <RotateCcw size={20} />
+                </button>
             </div>
 
+            {/* --- TABEL ORDER (DIPERBARUI) --- */}
             <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
                 <div className="overflow-x-auto">
                 <table className="w-full text-left">
@@ -462,48 +555,80 @@ export default function Dashboard() {
                     {filteredOrders.length === 0 ? (
                         <tr><td colSpan={6} className="text-center py-10 text-slate-400 italic">Tidak ada data ditemukan</td></tr>
                     ) : (
-                        filteredOrders.map((order) => (
+                        currentItems.map((order) => (
                         <tr key={order.id} className="hover:bg-blue-50/30 transition-colors">
+                            {/* KOLOM 1: ORDER ID */}
                             <td className="py-4 px-6"><span className="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">{order.orderId}</span></td>
+                            
+                            {/* KOLOM 2: PELANGGAN (Updated: Ada No HP & WA) */}
                             <td className="py-4 px-6">
-                            <p className="font-bold text-slate-700">{order.customerName}</p>
-                            <p className="text-xs text-slate-400 mt-0.5">{new Date(order.createdAt).toLocaleDateString('id-ID')}</p>
+                                <p className="font-bold text-slate-700">{order.customerName}</p>
+                                
+                                {/* CONTAINER NO HP & WA */}
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-[11px] text-slate-500 font-medium font-mono bg-slate-50 px-1.5 rounded">{order.phoneNumber || '-'}</span>
+                                    
+                                    {/* Tombol WA hanya muncul jika ada nomor HP dan bukan tanda strip */}
+                                    {order.phoneNumber && order.phoneNumber !== '-' && (
+                                        <a 
+                                            href={`https://wa.me/${order.phoneNumber.replace(/^0/, '62').replace(/\D/g, '')}?text=Halo Kak ${encodeURIComponent(order.customerName)}, status laundry Anda (Order ID: ${order.orderId}) saat ini: ${order.status}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[9px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full font-bold hover:bg-emerald-500 hover:text-white flex items-center gap-1 transition-colors border border-emerald-200"
+                                            title="Chat via WhatsApp"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                            Chat
+                                        </a>
+                                    )}
+                                </div>
+
+                                <p className="text-[10px] text-slate-400 mt-1.5">{new Date(order.createdAt).toLocaleDateString('id-ID')}</p>
                             </td>
+
+                            {/* KOLOM 3: INFO BERAT & HARGA */}
                             <td className="py-4 px-6 text-center">
-                            <div className="font-bold text-slate-600 text-sm">{order.serviceType}</div>
-                            <div className="text-[10px] text-blue-500 font-bold">{order.weight} Kg • Rp {order.totalPrice.toLocaleString('id-ID')}</div>
+                                <div className="font-bold text-slate-600 text-sm">{order.serviceType}</div>
+                                <div className="text-[10px] text-blue-500 font-bold">{order.weight} Kg • Rp {order.totalPrice.toLocaleString('id-ID')}</div>
                             </td>
                             
-                            {/* KOLOM PEMBAYARAN */}
+                            {/* KOLOM 4: STATUS PEMBAYARAN */}
                             <td className="py-4 px-6 text-center">
-                                <button onClick={() => togglePayment(order)} className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${order.isPaid ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'}`}>
+                                <button onClick={() => togglePayment(order)} className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${order.isPaid ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'}`}>
                                     {order.isPaid ? 'LUNAS' : 'BELUM BAYAR'}
                                 </button>
                             </td>
 
+                            {/* KOLOM 5: STATUS PENGERJAAN */}
                             <td className="py-4 px-6 text-center">
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${getStatusColor(order.status)}`}>
-                                {order.status === 'COMPLETED' ? <CheckCircle size={12} /> : <Clock size={12} />}
-                                {order.status}
-                            </span>
+                                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${getStatusColor(order.status)}`}>
+                                    {order.status === 'COMPLETED' ? <CheckCircle size={12} /> : <Clock size={12} />}
+                                    {order.status}
+                                </span>
                             </td>
+
+                            {/* KOLOM 6: AKSI */}
                             <td className="py-4 px-6 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                                <button onClick={() => handlePrint(order)} className="p-2 bg-slate-800 text-white rounded-full hover:bg-slate-900 transition-all shadow-sm" title="Cetak Struk">
-                                    <Printer size={16} />
-                                </button>
-                                {order.status !== 'COMPLETED' && (
-                                <button onClick={() => markAsCompleted(order.id)} className="p-2 bg-emerald-50 text-emerald-600 rounded-full hover:bg-emerald-500 hover:text-white transition-all shadow-sm" title="Selesai">
-                                    <CheckCircle size={16} />
-                                </button>
-                                )}
-                                <button onClick={() => openEditModal(order)} className="p-2 bg-slate-100 text-slate-600 rounded-full hover:bg-blue-500 hover:text-white transition-all shadow-sm" title="Edit">
-                                <Edit size={16} />
-                                </button>
-                                <button onClick={() => promptDelete(order.id)} className="p-2 bg-red-50 text-red-400 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm">
-                                <Trash2 size={16} />
-                                </button>
-                            </div>
+                                <div className="flex items-center justify-center gap-2">
+                                    <button onClick={() => handlePrint(order)} className="p-2 bg-slate-800 text-white rounded-full hover:bg-slate-900 transition-all shadow-sm active:scale-90" title="Cetak Struk">
+                                        <Printer size={16} />
+                                    </button>
+                                    
+                                    {/* Tombol Selesai hanya muncul jika belum completed */}
+                                    {order.status !== 'COMPLETED' && (
+                                        <button onClick={() => markAsCompleted(order.id)} className="p-2 bg-emerald-50 text-emerald-600 rounded-full hover:bg-emerald-500 hover:text-white transition-all shadow-sm active:scale-90" title="Tandai Selesai">
+                                            <CheckCircle size={16} />
+                                        </button>
+                                    )}
+
+                                    <button onClick={() => openEditModal(order)} className="p-2 bg-slate-100 text-slate-600 rounded-full hover:bg-blue-500 hover:text-white transition-all shadow-sm active:scale-90" title="Edit Data">
+                                        <Edit size={16} />
+                                    </button>
+                                    
+                                    <button onClick={() => promptDelete(order.id)} className="p-2 bg-red-50 text-red-400 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm active:scale-90" title="Hapus Permanen">
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         ))
@@ -576,6 +701,21 @@ export default function Dashboard() {
                 <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Nama Pelanggan</label>
                     <input type="text" required value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-blue-500 focus:bg-white outline-none font-bold text-slate-700 transition-all" placeholder="Contoh: Budi Santoso" />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">Nomor WhatsApp</label>
+                    <input 
+                        type="text" 
+                        required 
+                        value={formData.phoneNumber} 
+                        onChange={e => {
+                            // Hanya izinkan angka
+                            const val = e.target.value.replace(/\D/g, '');
+                            setFormData({...formData, phoneNumber: val});
+                        }} 
+                        className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-blue-500 focus:bg-white outline-none font-bold text-slate-700 transition-all" 
+                        placeholder="Contoh: 08123456789" 
+                    />
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-2">
@@ -671,22 +811,21 @@ export default function Dashboard() {
                         <div className="flex gap-3">
                             <button 
                                 onClick={() => setDeleteStep(1)} 
-                                className="flex-1 py-4 rounded-2xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all"
-                            >
+                                className="flex-1 py-4 rounded-2xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">
                                 Kembali
                             </button>
                             <button 
                                 onClick={confirmDelete} 
                                 disabled={isDeleting}
-                                className="flex-1 py-4 rounded-2xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-200 transition-all flex items-center justify-center"
-                            >
-                                <div className="flex items-center gap-3">
+                                className="flex-1 py-4 rounded-2xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-200 transition-all flex items-center justify-center">
+                               <div className="flex items-center justify-center">
                                     {isDeleting ? (
+                                        // KONDISI 1: SEDANG LOADING (Hanya Icon Putar)
                                         <Loader2 className="animate-spin w-5 h-5" /> 
                                     ) : (
-                                        <Trash2 size={20} />
+                                        // KONDISI 2: TIDAK LOADING (Hanya Teks)
+                                        <span>Ya, Hapus Permanen</span>
                                     )}
-                                    <span>Ya, Hapus Permanen</span>
                                 </div>
                             </button>
                         </div>
@@ -778,6 +917,77 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* --- FOOTER PAGINATION & LIMIT --- */}
+            <div className="flex flex-col md:flex-row items-center justify-between mt-6 px-2 gap-4">
+                
+                {/* BAGIAN KIRI: Dropdown Limit & Info Data */}
+                <div className="flex items-center gap-3 text-sm text-slate-500">
+                    <span className="font-medium">Tampilkan</span>
+                    <select 
+                        value={itemsPerPage} 
+                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                        className="bg-white border border-slate-200 rounded-lg py-1 px-2 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 cursor-pointer"
+                    >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={15}>15</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                    </select>
+                    <span className="font-medium">
+                        dari <strong>{filteredOrders.length}</strong> data
+                    </span>
+                </div>
+
+                {/* BAGIAN KANAN: Tombol Next/Prev */}
+                {totalPages > 1 && (
+                    <div className="flex items-center gap-2">
+                        {/* Tombol Previous */}
+                        <button 
+                            onClick={() => paginate(currentPage - 1)} 
+                            disabled={currentPage === 1}
+                            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-slate-600"
+                        >
+                            <ChevronLeft size={18} />
+                        </button>
+
+                        {/* Angka Halaman (Smart Display) */}
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: totalPages }, (_, i) => {
+                                // Logika biar angka halaman tidak terlalu panjang jika halamannya banyak
+                                if (i + 1 === 1 || i + 1 === totalPages || (i + 1 >= currentPage - 1 && i + 1 <= currentPage + 1)) {
+                                    return (
+                                        <button
+                                            key={i + 1}
+                                            onClick={() => paginate(i + 1)}
+                                            className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                                                currentPage === i + 1 
+                                                ? 'bg-slate-800 text-white shadow-lg shadow-slate-200' 
+                                                : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            {i + 1}
+                                        </button>
+                                    );
+                                } else if (i + 1 === currentPage - 2 || i + 1 === currentPage + 2) {
+                                    return <span key={i} className="text-slate-400 text-xs px-1">...</span>;
+                                }
+                                return null;
+                            })}
+                        </div>
+
+                        {/* Tombol Next */}
+                        <button 
+                            onClick={() => paginate(currentPage + 1)} 
+                            disabled={currentPage === totalPages}
+                            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-slate-600"
+                        >
+                            <ChevronRight size={18} />
+                        </button>
+                    </div>
+                )}
+            </div>
 
     </main>
   );

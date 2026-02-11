@@ -20,6 +20,10 @@ export class CreateOrderDto {
   isPaid?: boolean;
   phone?: string;
 
+  @IsString()
+  @IsNotEmpty()
+  phoneNumber: string;
+
   // Validasi: Hanya terima 'KILOAN', 'SATUAN', atau 'EXPRESS'
   @IsEnum(ServiceType, {
     message: 'Service type harus KILOAN, SATUAN, atau EXPRESS',
