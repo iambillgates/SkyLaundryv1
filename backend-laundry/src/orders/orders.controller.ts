@@ -25,32 +25,39 @@ export class OrdersController {
     return this.ordersService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    // Ubah jadi string
-    return this.ordersService.findOne(id); // HAPUS tanda + (plus)
+  // 👇 --- PINDAHKAN RUTE STATIS KE SINI (DI ATAS :id) --- 👇
+
+  @Get('activity/logs')
+  getLogs() {
+    return this.ordersService.getLogs();
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
-    // Ubah jadi string
-    return this.ordersService.update(id, updateOrderDto); // HAPUS tanda +
+  @Get('stats/financial')
+  getFinancialStats() {
+    return this.ordersService.getFinancialStats();
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    // Ubah jadi string
-    return this.ordersService.remove(id); // HAPUS tanda +
-  }
-
-  // Endpoint khusus untuk tracking resi (letakkan sebelum @Get(':id'))
   @Get('track/:orderId')
   async trackOrder(@Param('orderId') orderId: string) {
     return this.ordersService.findByPublicId(orderId);
   }
 
-  @Get('activity/logs')
-  getLogs() {
-    return this.ordersService.getLogs();
+  // 👆 -------------------------------------------------- 👆
+
+  // 👇 --- RUTE DINAMIS (Dengan Parameter) DI BAWAH --- 👇
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.ordersService.findOne(id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
+    return this.ordersService.update(id, updateOrderDto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.ordersService.remove(id);
   }
 }

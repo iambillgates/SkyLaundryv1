@@ -1,19 +1,44 @@
 'use client';
-
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { 
-  LineChart, Search, Filter, RotateCcw, LogOut, 
-  CheckCircle, AlertCircle, Trash2, Package, Calendar, 
-  Plus, X, Edit, Save, Loader2, Clock, Printer, DollarSign, 
-  AlertTriangle, Info, ChevronLeft, ChevronRight // Icon tambahan untuk notifikasi & log
+  LineChart, Search, RotateCcw, LogOut, 
+  CheckCircle, Trash2, Plus, X, Edit, Save, Loader2, Clock, Printer, DollarSign, 
+  AlertTriangle, Info, ChevronLeft, ChevronRight, MessageSquare, TrendingUp, TrendingDown, Wallet, Activity, Calendar 
 } from 'lucide-react';
+
 import {
-  Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler
+  Chart as ChartJS, 
+  CategoryScale, 
+  LinearScale, 
+  PointElement, 
+  LineElement, 
+  BarElement, 
+  BarController,  // <--- TAMBAHKAN INI
+  LineController, // <--- TAMBAHKAN INI
+  Title, 
+  Tooltip, 
+  Legend, 
+  Filler
 } from 'chart.js';
+
 import { Line } from 'react-chartjs-2';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+// Jangan lupa daftarkan juga di dalam register:
+ChartJS.register(
+  CategoryScale, 
+  LinearScale, 
+  PointElement, 
+  LineElement, 
+  BarElement, 
+  BarController,  // <--- TAMBAHKAN INI
+  LineController, // <--- TAMBAHKAN INI
+  Title, 
+  Tooltip, 
+  Legend, 
+  Filler
+);
 
 // --- TIPE DATA ---
 interface Order {
@@ -37,12 +62,25 @@ interface ActivityLog {
   createdAt: string;
 }
 
+interface FinancialStats {
+    today: number;
+    yesterday: number;
+    dayVsDayPercent: number;
+    thisMonth: number;
+    lastMonth: number;
+    monthVsMonthPercent: number;
+    dayVsMonthPercent: number;
+  }
+
 export default function Dashboard() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]); // State Logs
   const [loading, setLoading] = useState(true);
   
+  // State Filter Laporan
+  const [reportPeriod, setReportPeriod] = useState<'daily' | 'monthly' | 'yearly'>('daily');
+
   // State Filter
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -91,6 +129,31 @@ export default function Dashboard() {
     type: 'success' as 'success' | 'error' | 'info'
   });
 
+  // State Filter Tanggal (Slide Picker)
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null); // null = Tampilkan Semua
+  const dateSliderRef = useRef<HTMLDivElement>(null);
+
+  // Generate Array Tanggal (15 Hari Terakhir)
+  const slideDates = useMemo(() => {
+      const dates = [];
+      const today = new Date();
+      // Loop dari 14 hari yang lalu sampai hari ini
+      for (let i = 14; i >= 0; i--) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          dates.push(d);
+      }
+      return dates; // Hasil: [Tgl 6, Tgl 7, ..., Tgl 20]
+  }, []);
+
+  // Fungsi untuk tombol geser Kiri / Kanan
+  const slideLeft = () => {
+      if (dateSliderRef.current) dateSliderRef.current.scrollBy({ left: -250, behavior: 'smooth' });
+  };
+  const slideRight = () => {
+      if (dateSliderRef.current) dateSliderRef.current.scrollBy({ left: 250, behavior: 'smooth' });
+  };
+
   // Fungsi Trigger Notifikasi
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotif({ show: true, message, type });
@@ -100,13 +163,29 @@ export default function Dashboard() {
     }, 3000);
   };
 
+  const [financialStats, setFinancialStats] = useState<FinancialStats>({
+    today: 0, yesterday: 0, dayVsDayPercent: 0,
+    thisMonth: 0, lastMonth: 0, monthVsMonthPercent: 0,
+    dayVsMonthPercent: 0
+  });
+
+  // 3. Fungsi fetch khusus untuk data keuangan
+  const fetchFinancialStats = async () => {
+    try {
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/orders/stats/financial`);
+      setFinancialStats(res.data);
+    } catch (error) {
+      console.error("Gagal mengambil statistik keuangan", error);
+    }
+  };
+
   // --- 1. FETCH DATA (ORDERS & LOGS) ---
   const fetchOrders = async () => {
     const token = localStorage.getItem('accessToken');
     if (!token) return router.push('/staff-login');
 
     try {
-      const res = await fetch('http://localhost:4000/orders', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -131,7 +210,7 @@ export default function Dashboard() {
   const fetchLogs = async () => {
     const token = localStorage.getItem('accessToken');
     try {
-      const res = await fetch('http://localhost:4000/orders/activity/logs', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/activity/logs`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -142,6 +221,8 @@ export default function Dashboard() {
   useEffect(() => { 
       fetchOrders(); 
       fetchLogs(); // Ambil logs juga saat load
+      fetchFinancialStats();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // --- 2. PRINT FUNCTION ---
@@ -160,8 +241,8 @@ export default function Dashboard() {
 
     try {
       const url = isEditing 
-        ? `http://localhost:4000/orders/${editId}` 
-        : 'http://localhost:4000/orders';
+        ? `${process.env.NEXT_PUBLIC_API_URL}/orders/${editId}` 
+        : `${process.env.NEXT_PUBLIC_API_URL}/orders`;
       
       const method = isEditing ? 'PATCH' : 'POST';
 
@@ -180,6 +261,7 @@ export default function Dashboard() {
 
       await fetchOrders();
       await fetchLogs(); // Refresh log setelah simpan
+      await fetchFinancialStats();
       closeModal();
       
       // Notifikasi Sukses
@@ -188,7 +270,7 @@ export default function Dashboard() {
       // Tawarkan Print jika pesanan baru
       if (!isEditing) {
         setPendingPrintOrder(savedData); // Simpan data order yang baru dibuat
-        setShowPrintModal(true);         // Buka modal konfirmasi
+        setShowPrintModal(true);        // Buka modal konfirmasi
       }
 
     } catch (error) {
@@ -209,7 +291,7 @@ export default function Dashboard() {
     setOrders(orders.map(o => o.id === order.id ? { ...o, isPaid: newStatus } : o));
 
     try {
-        const res = await fetch(`http://localhost:4000/orders/${order.id}`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${order.id}`, {
             method: 'PATCH',
             headers: { 
                 'Content-Type': 'application/json',
@@ -223,6 +305,7 @@ export default function Dashboard() {
         showNotification(`Status pembayaran: ${newStatus ? 'LUNAS' : 'BELUM LUNAS'}`, "info");
         fetchOrders(); // Sync data
         fetchLogs();   // Sync logs
+        fetchFinancialStats();
     } catch (error) { 
         console.error(error);
         setOrders(originalOrders); // Rollback
@@ -247,7 +330,7 @@ export default function Dashboard() {
     const token = localStorage.getItem('accessToken');
 
     try {
-      const res = await fetch(`http://localhost:4000/orders/${deleteId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${deleteId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -256,6 +339,7 @@ export default function Dashboard() {
           showNotification("Pesanan berhasil dihapus permanen", "info");
           await fetchOrders();
           await fetchLogs();
+          await fetchFinancialStats();
           setShowDeleteModal(false); 
       } else {
           throw new Error("Gagal hapus");
@@ -271,7 +355,7 @@ export default function Dashboard() {
   const markAsCompleted = async (id: string) => {
     const token = localStorage.getItem('accessToken');
     try {
-      const res = await fetch(`http://localhost:4000/orders/${id}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ status: 'COMPLETED' })
@@ -281,6 +365,7 @@ export default function Dashboard() {
           showNotification("Pesanan ditandai Selesai", "success");
           fetchOrders();
           fetchLogs();
+          fetchFinancialStats();
       }
     } catch (error) { console.error(error); }
   };
@@ -310,7 +395,7 @@ export default function Dashboard() {
       const lowerSearch = search.toLowerCase();
       const paymentStatusSearch = order.isPaid ? 'lunas' : 'belum'; 
 
-      // 1. LOGIKA SEARCH TEXT (Sama seperti sebelumnya)
+      // 1. LOGIKA SEARCH TEXT
       const matchSearch = 
         order.customerName.toLowerCase().includes(lowerSearch) ||   
         order.orderId.toLowerCase().includes(lowerSearch) ||        
@@ -321,20 +406,20 @@ export default function Dashboard() {
       // 2. LOGIKA STATUS
       const matchStatus = statusFilter === 'all' ? true : order.status === statusFilter;
       
-      // 3. LOGIKA DATE RANGE (BARU)
+      // 3. LOGIKA TANGGAL SPESIFIK (SLIDE PICKER) - DIPERBARUI
       let matchDate = true;
-      if (startDate || endDate) {
-        const orderDate = new Date(order.createdAt).setHours(0, 0, 0, 0); // Ambil tanggalnya saja (jam 00:00)
-        const start = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : null;
-        const end = endDate ? new Date(endDate).setHours(0, 0, 0, 0) : null;
-
-        if (start && orderDate < start) matchDate = false; // Jika sebelum tanggal mulai
-        if (end && orderDate > end) matchDate = false;     // Jika setelah tanggal akhir
+      if (selectedDate) {
+        // Gunakan toLocaleDateString agar lebih aman dari bug zona waktu (Timezone)
+        const dateFromOrder = new Date(order.createdAt).toLocaleDateString('id-ID');
+        const dateFromFilter = selectedDate.toLocaleDateString('id-ID');
+        matchDate = dateFromOrder === dateFromFilter;
       }
       
       return matchSearch && matchStatus && matchDate;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [orders, search, statusFilter, startDate, endDate]); // Jangan lupa update dependency array
+    
+  // 👇 PASTIKAN selectedDate ADA DI DALAM KURUNG SIKU INI 👇
+  }, [orders, search, statusFilter, selectedDate]);
 
   // Hitung index data
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -347,7 +432,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, statusFilter, startDate, endDate, itemsPerPage]);
+  }, [search, statusFilter, selectedDate, itemsPerPage]);
 
   const stats = useMemo(() => ({
     income: orders.filter(o => o.status === 'COMPLETED').reduce((acc, curr) => acc + curr.totalPrice, 0),
@@ -356,16 +441,73 @@ export default function Dashboard() {
     countPending: orders.filter(o => o.status !== 'COMPLETED').length
   }), [orders]);
 
-  const chartData = {
-    labels: filteredOrders.slice(0, 7).map(o => new Date(o.createdAt).toLocaleDateString('id-ID', {day: '2-digit', month: 'short'})).reverse(),
+  // --- 1. OLAH DATA LAPORAN DINAMIS (HARIAN/BULANAN/TAHUNAN) ---
+  const reportData = useMemo(() => {
+    // Filter order yang sudah Selesai & Lunas
+    const validOrders = orders.filter(o => o.status === 'COMPLETED' && o.isPaid);
+
+    const grouped = validOrders.reduce((acc, order) => {
+        const dateObj = new Date(order.createdAt);
+        let key = '';         // Kunci unik untuk grouping (misal: "2026-03" untuk bulanan)
+        let display = '';     // Teks yang akan tampil di tabel/chart (misal: "Maret 2026")
+        let sortTime = 0;     // Angka untuk mengurutkan (dari terbaru ke terlama)
+
+        // Tentukan format berdasarkan pilihan Dropdown
+        if (reportPeriod === 'daily') {
+            key = dateObj.toLocaleDateString('en-CA'); // Format: YYYY-MM-DD
+            display = dateObj.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+            sortTime = dateObj.setHours(0, 0, 0, 0);
+        } else if (reportPeriod === 'monthly') {
+            key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`; // Format: YYYY-MM
+            display = dateObj.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+            sortTime = new Date(dateObj.getFullYear(), dateObj.getMonth(), 1).getTime();
+        } else if (reportPeriod === 'yearly') {
+            key = `${dateObj.getFullYear()}`; // Format: YYYY
+            display = dateObj.toLocaleDateString('id-ID', { year: 'numeric' });
+            sortTime = new Date(dateObj.getFullYear(), 0, 1).getTime();
+        }
+        
+        // Buat wadah grouping jika belum ada
+        if (!acc[key]) {
+            acc[key] = {
+                timestamp: sortTime,
+                displayDate: display,
+                customerNames: new Set(),
+                revenue: 0
+            };
+        }
+        
+        // Tambahkan data ke dalam grouping
+        acc[key].customerNames.add(order.customerName); 
+        acc[key].revenue += order.totalPrice;
+        return acc;
+    }, {} as Record<string, { timestamp: number, displayDate: string, customerNames: Set<string>, revenue: number }>);
+
+    // Ubah object menjadi array, dan urutkan dari PALING BARU ke PALING LAMA
+    return Object.values(grouped).sort((a, b) => b.timestamp - a.timestamp).map(item => ({
+        displayDate: item.displayDate,
+        customerCount: item.customerNames.size,
+        revenue: item.revenue
+    }));
+  }, [orders, reportPeriod]); // <--- Akan otomatis hitung ulang jika dropdown berubah
+
+  // --- 2. KONFIGURASI CHART LAPORAN ---
+  const periodChartData = {
+    // Balik array untuk chart agar mengalir dari Kiri (Lama) ke Kanan (Baru)
+    labels: [...reportData].reverse().map(item => item.displayDate),
     datasets: [{
-      label: 'Omzet',
-      data: filteredOrders.slice(0, 7).map(o => o.totalPrice).reverse(),
-      borderColor: 'rgb(59, 130, 246)',
-      backgroundColor: 'rgba(59, 130, 246, 0.1)',
-      fill: true,
-      tension: 0.4,
-    }],
+        label: 'Omzet',
+        data: [...reportData].reverse().map(item => item.revenue),
+        borderColor: '#3b82f6', // Biru Tailwind
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#ffffff',
+        pointBorderColor: '#3b82f6',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+    }]
   };
 
   const getStatusColor = (status: string) => {
@@ -437,6 +579,23 @@ export default function Dashboard() {
             <p className="text-slate-400 text-sm mt-1">Panel Kontrol Admin & Staff</p>
             </div>
             <div className="flex gap-3">
+            
+            {/* LINK KE BOT DASHBOARD (AUTO LOGIN) */}
+            <button 
+                onClick={() => {
+                    const token = localStorage.getItem('accessToken');
+                    if (token) {
+                        const targetUrl = `http://localhost:3005/admin/auth-token?token=${encodeURIComponent(token)}`;
+                        window.open(targetUrl, '_blank');
+                    } else {
+                        window.open('http://localhost:3005/admin/login', '_blank');
+                    }
+                }}
+                className="bg-emerald-500 text-white hover:bg-emerald-600 px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-emerald-200 active:scale-95"
+            >
+                <MessageSquare size={20} /> Bot WA
+            </button>
+
             <button onClick={openCreateModal} className="bg-blue-600 text-white hover:bg-blue-700 px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95">
                 <Plus size={20} /> Input Pesanan
             </button>
@@ -466,8 +625,90 @@ export default function Dashboard() {
             </div>
         </div>
 
+        {/* --- STATISTIK KEUANGAN --- */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                
+                {/* CARD 1: DAY VS DAY (Hari Ini vs Kemarin) */}
+                <div className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Pendapatan Hari Ini</p>
+                            <h3 className="text-2xl font-black text-slate-800">
+                                Rp {financialStats.today.toLocaleString('id-ID')}
+                            </h3>
+                        </div>
+                        <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+                            <DollarSign size={24} />
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                        <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${financialStats.dayVsDayPercent >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+                            {financialStats.dayVsDayPercent >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                            {Math.abs(financialStats.dayVsDayPercent)}%
+                        </span>
+                        <span className="text-slate-400 text-xs">vs kemarin (Rp {financialStats.yesterday.toLocaleString('id-ID')})</span>
+                    </div>
+                    {/* Hiasan background */}
+                    <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-blue-50 rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
+                </div>
+
+                {/* CARD 2: MONTH VS MONTH (Bulan Ini vs Bulan Lalu) */}
+                <div className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Pendapatan Bulan Ini</p>
+                            <h3 className="text-2xl font-black text-slate-800">
+                                Rp {financialStats.thisMonth.toLocaleString('id-ID')}
+                            </h3>
+                        </div>
+                        <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl">
+                            <Wallet size={24} />
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                        <span className={`flex items-center gap-1 px-2 py-1 rounded-md ${financialStats.monthVsMonthPercent >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+                            {financialStats.monthVsMonthPercent >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                            {Math.abs(financialStats.monthVsMonthPercent)}%
+                        </span>
+                        <span className="text-slate-400 text-xs">vs bulan lalu</span>
+                    </div>
+                    <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-purple-50 rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
+                </div>
+
+                {/* CARD 3: DAY VS MONTH (Kontribusi Hari Ini) */}
+                <div className="bg-white rounded-[2rem] p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Kontribusi Harian</p>
+                            <h3 className="text-2xl font-black text-slate-800">
+                                {financialStats.dayVsMonthPercent}%
+                            </h3>
+                        </div>
+                        <div className="p-3 bg-orange-50 text-orange-600 rounded-2xl">
+                            <Activity size={24} />
+                        </div>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div className="w-full bg-slate-100 rounded-full h-2.5 mb-2 overflow-hidden">
+                        <div 
+                            className="bg-orange-500 h-2.5 rounded-full transition-all duration-1000 ease-out" 
+                            style={{ width: `${Math.min(financialStats.dayVsMonthPercent, 100)}%` }}
+                        ></div>
+                    </div>
+                    <p className="text-xs text-slate-400 font-medium">
+                        Hari ini menyumbang <strong className="text-slate-600">{financialStats.dayVsMonthPercent}%</strong> dari omzet bulan ini.
+                    </p>
+                    <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-orange-50 rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
+                </div>
+
+            </div>
+
         {/* MAIN CONTENT GRID */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
             
             {/* KIRI: TABEL & FILTER */}
             <div className="lg:col-span-2 space-y-8">
@@ -534,6 +775,71 @@ export default function Dashboard() {
                     title="Reset Filter"
                 >
                     <RotateCcw size={20} />
+                </button>
+            </div>
+
+
+            {/* --- UI SLIDE DATE PICKER (BARU) --- */}
+            <div className="bg-white p-3 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-2 mt-4">
+                {/* Tombol Kiri */}
+                <button onClick={slideLeft} className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full shrink-0 transition-colors">
+                    <ChevronLeft size={20} />
+                </button>
+                
+                {/* Area Tanggal (Bisa di-scroll / digeser) */}
+                <div 
+                    ref={dateSliderRef}
+                    className="flex items-center gap-3 overflow-x-auto scroll-smooth py-2 flex-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+                >
+                    {/* Tombol "Semua Tanggal" */}
+                    <button 
+                        onClick={() => setSelectedDate(null)}
+                        className={`flex flex-col items-center justify-center min-w-[70px] h-[80px] rounded-2xl border-2 transition-all shrink-0 ${
+                            selectedDate === null 
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 scale-105' 
+                            : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-blue-300'
+                        }`}
+                    >
+                        <Calendar size={20} className="mb-1" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider">Semua</span>
+                    </button>
+
+                    {/* Render 15 Hari Terakhir */}
+                    {slideDates.map((date, idx) => {
+                        const isSelected = selectedDate?.toDateString() === date.toDateString();
+                        const isToday = new Date().toDateString() === date.toDateString();
+                        
+                        return (
+                            <button 
+                                key={idx}
+                                onClick={() => setSelectedDate(date)}
+                                className={`flex flex-col items-center justify-center min-w-[70px] h-[80px] rounded-2xl border-2 transition-all shrink-0 relative ${
+                                    isSelected 
+                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 scale-105' 
+                                    : isToday 
+                                        ? 'bg-blue-50 border-blue-200 text-blue-700 hover:border-blue-400'
+                                        : 'bg-white border-slate-100 text-slate-600 hover:border-blue-300 hover:bg-blue-50/50'
+                                }`}
+                            >
+                                {isToday && !isSelected && <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>}
+                                
+                                <span className={`text-[10px] font-bold uppercase tracking-wider ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                                    {date.toLocaleDateString('id-ID', { weekday: 'short' })}
+                                </span>
+                                <span className="text-xl font-black my-0.5 leading-none">
+                                    {date.getDate()}
+                                </span>
+                                <span className={`text-[10px] font-bold ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                                    {date.toLocaleDateString('id-ID', { month: 'short' })}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Tombol Kanan */}
+                <button onClick={slideRight} className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full shrink-0 transition-colors">
+                    <ChevronRight size={20} />
                 </button>
             </div>
 
@@ -643,12 +949,84 @@ export default function Dashboard() {
             <div className="space-y-8">
                 
                 {/* WIDGET CHART */}
-                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-xl">
-                    <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2">
-                        <LineChart size={20} className="text-blue-600" /> Tren Transaksi
-                    </h3>
-                    <div className="h-48">
-                        <Line data={chartData} options={{ responsive: true, maintainAspectRatio: false, scales: { y: { display: false }, x: { grid: { display: false } } }, plugins: { legend: { display: false } } }} />
+                {/* WIDGET LAPORAN DINAMIS (CHART + TABEL) */}
+                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-xl flex flex-col">
+                    
+                    {/* Header Widget: Judul & Dropdown */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                            <Calendar size={20} className="text-blue-600" /> 
+                            Laporan {reportPeriod === 'daily' ? 'Harian' : reportPeriod === 'monthly' ? 'Bulanan' : 'Tahunan'}
+                        </h3>
+                        
+                        {/* DROPDOWN PILIHAN WAKTU */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-1 flex items-center">
+                            <select 
+                                value={reportPeriod} 
+                                onChange={(e) => setReportPeriod(e.target.value as 'daily' | 'monthly' | 'yearly')}
+                                className="bg-transparent border-none outline-none text-sm font-bold text-slate-600 px-3 py-1 cursor-pointer hover:text-blue-600 transition-colors"
+                            >
+                                <option value="daily">Harian</option>
+                                <option value="monthly">Bulanan</option>
+                                <option value="yearly">Tahunan</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    {/* Area Grafik */}
+                    <div className="h-48 mb-6">
+                        <Line 
+                            data={periodChartData} 
+                            options={{ 
+                                responsive: true, 
+                                maintainAspectRatio: false, 
+                                plugins: { legend: { display: false } },
+                                scales: { 
+                                    x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                                    y: { 
+                                        border: { dash: [4, 4] },
+                                        grid: { color: '#f1f5f9' },
+                                        ticks: { 
+                                            font: { size: 10 },
+                                            callback: (value) => 'Rp ' + Number(value).toLocaleString('id-ID')
+                                        } 
+                                    } 
+                                } 
+                            }} 
+                        />
+                    </div>
+
+                    {/* Area Tabel */}
+                    <div className="overflow-hidden rounded-xl border border-slate-100 mt-2 flex-1">
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-50 border-b border-slate-100">
+                                <tr>
+                                    <th className="py-3 px-4 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider text-center">Waktu</th>
+                                    <th className="py-3 px-4 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider text-center">Total Pelanggan</th>
+                                    <th className="py-3 px-4 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider text-right">Pendapatan</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {reportData.length === 0 ? (
+                                    <tr><td colSpan={3} className="text-center py-6 text-slate-400 text-xs italic">Belum ada data pendapatan</td></tr>
+                                ) : (
+                                    reportData.map((item, idx) => (
+                                        <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
+                                            {/* Kolom Waktu (Otomatis menyesuaikan format) */}
+                                            <td className="py-3 px-4 text-xs font-bold text-slate-700 text-center">
+                                                {item.displayDate}
+                                            </td>
+                                            <td className="py-3 px-4 text-xs text-slate-500 font-medium text-center">
+                                                {item.customerCount} Orang
+                                            </td>
+                                            <td className="py-3 px-4 text-sm font-black text-blue-600 text-right">
+                                                Rp {item.revenue.toLocaleString('id-ID')}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 

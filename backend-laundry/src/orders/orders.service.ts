@@ -200,4 +200,71 @@ export class OrdersService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async getFinancialStats() {
+    const now = new Date();
+
+    // --- SETUP TANGGAL ---
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+    const startOfYesterday = new Date(startOfToday);
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      0,
+      23,
+      59,
+      59,
+    );
+
+    // --- HELPER UNTUK MENGHITUNG TOTAL (Hanya yang LUNAS) ---
+    const getRevenue = async (startDate: Date, endDate: Date) => {
+      const result = await this.prisma.order.aggregate({
+        _sum: { totalPrice: true },
+        where: {
+          isPaid: true, // Hanya hitung yang sudah lunas
+          createdAt: { gte: startDate, lte: endDate },
+        },
+      });
+      return result._sum.totalPrice || 0;
+    };
+
+    // --- AMBIL DATA ---
+    const todayRevenue = await getRevenue(startOfToday, now);
+    const yesterdayRevenue = await getRevenue(
+      startOfYesterday,
+      new Date(startOfYesterday.setHours(23, 59, 59)),
+    );
+    const thisMonthRevenue = await getRevenue(startOfThisMonth, now);
+    const lastMonthRevenue = await getRevenue(startOfLastMonth, endOfLastMonth);
+
+    // --- KALKULASI PERSENTASE ---
+    const calcPercentage = (current: number, previous: number) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return Number((((current - previous) / previous) * 100).toFixed(1));
+    };
+
+    return {
+      today: todayRevenue,
+      yesterday: yesterdayRevenue,
+      dayVsDayPercent: calcPercentage(todayRevenue, yesterdayRevenue),
+
+      thisMonth: thisMonthRevenue,
+      lastMonth: lastMonthRevenue,
+      monthVsMonthPercent: calcPercentage(thisMonthRevenue, lastMonthRevenue),
+
+      // Persentase kontribusi hari ini ke total bulan ini
+      dayVsMonthPercent:
+        thisMonthRevenue === 0
+          ? 0
+          : Number(((todayRevenue / thisMonthRevenue) * 100).toFixed(1)),
+    };
+  }
 }
