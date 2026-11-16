@@ -3,16 +3,32 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { PrismaService } from '../prisma.service';
 import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { JwtStrategy } from './jwt.strategy';
 
 @Module({
   imports: [
-    JwtModule.register({
+    PassportModule,
+    JwtModule.registerAsync({
       global: true,
-      secret: 'RAHASIA_NEGARA_SANGAT_PENTING', // Ganti dengan env variable nanti!
-      signOptions: { expiresIn: '1d' }, // Token berlaku 1 hari
+      useFactory: () => {
+        // Secret JWT WAJIB dari env — tidak ada lagi secret hardcode.
+        // Aplikasi gagal start dengan pesan yang jelas kalau belum diset,
+        // supaya tidak pernah jalan diam-diam dengan secret bawaan.
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+          throw new Error(
+            'JWT_SECRET belum diset. Salin backend-laundry/.env.example ke .env dan isi JWT_SECRET dengan string acak yang panjang.',
+          );
+        }
+        return {
+          secret,
+          signOptions: { expiresIn: '1d' }, // Token berlaku 1 hari
+        };
+      },
     }),
   ],
-  providers: [AuthService, PrismaService],
+  providers: [AuthService, PrismaService, JwtStrategy],
   controllers: [AuthController],
   exports: [AuthService],
 })
